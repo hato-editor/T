@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>人の名前にするゲーム</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6fb;color:#172033;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif}
+main{max-width:680px;margin:auto;padding:18px 14px 36px}
+h1{text-align:center;font-size:26px;margin:8px 0 4px}
+.sub{text-align:center;color:#667085;margin:0 0 18px}
+.card{background:#fff;border-radius:18px;padding:17px;margin:12px 0;box-shadow:0 4px 18px #14213d12}
+.big{text-align:center;font-size:23px;font-weight:800;min-height:34px}
+#slots{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:16px 0}
+.slot{min-height:62px;border:2px dashed #cbd5e1;border-radius:13px;background:#f8fafc;color:#64748b;font-size:18px;font-weight:700;padding:5px}
+.slot.filled{border-style:solid;background:#eff6ff;border-color:#93c5fd;color:#172033;font-size:26px}
+.slot.available{border-color:#2563eb;background:#dbeafe;color:#1d4ed8}
+button{border:0;border-radius:12px;padding:12px 15px;font-size:16px;font-weight:700;background:#2563eb;color:white;touch-action:manipulation}
+button.secondary{background:#e8edf5;color:#24324a}
+button.alt{background:#f59e0b;color:#241800}
+button:disabled{opacity:.4}
+.row{display:flex;justify-content:center;gap:9px;flex-wrap:wrap}
+.note{text-align:center;color:#475467;font-size:14px;min-height:24px;line-height:1.5}
+.rules{font-size:14px;line-height:1.8;color:#475467}
+#log{font-size:14px;color:#475467;max-height:160px;overflow:auto}
+.entry{padding:7px 0;border-bottom:1px solid #edf0f5}
+</style>
+</head>
+<body>
+<main>
+<h1>「人の名前にする」ゲーム</h1>
+<p class="sub">出た文字を、自分で好きなマスに入れよう！</p>
+
+<section class="card">
+  <div class="big" id="status">スタートして文字数を決めよう</div>
+  <div id="slots"></div>
+  <p class="note" id="instruction">最初に出た文字は、1文字目以外のマスに入れてね。</p>
+  <div class="row">
+    <button id="start">スタート</button>
+    <button id="draw" class="secondary" disabled>文字を引く</button>
+  </div>
+</section>
+
+<section class="card">
+  <h3>今回出た文字</h3>
+  <div class="big" id="current">—</div>
+  <p class="note" id="choose">「文字を引く」を押したあと、入れたいマスをタップ！</p>
+  <div class="row">
+    <button id="dak" class="alt" disabled>゛濁音にする</button>
+    <button id="han" class="alt" disabled>゜半濁音にする</button>
+  </div>
+</section>
+
+<section class="card">
+  <h3>ルール</h3>
+  <div class="rules">
+    ① 文字数は4〜8文字からランダムに決定。<br>
+    ② ひらがなが1文字ずつランダムに出る。<br>
+    ③ 出た文字をどのマスに入れるかは自分で決める。<br>
+    ④ 最初に出た文字だけは1文字目に置けない。<br>
+    ⑤ 同じ文字が何度出てもOK。濁音・半濁音は出た後に変更できる。<br>
+    ⑥ 全てのマスが埋まったら完成！
+  </div>
+</section>
+
+<section class="card"><h3>履歴</h3><div id="log">まだありません</div></section>
+</main>
+
+<script>
+const kana = [..."あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん"];
+const dak = {"か":"が","き":"ぎ","く":"ぐ","け":"げ","こ":"ご","さ":"ざ","し":"じ","す":"ず","せ":"ぜ","そ":"ぞ","た":"だ","ち":"ぢ","つ":"づ","て":"で","と":"ど","は":"ば","ひ":"び","ふ":"ぶ","へ":"べ","ほ":"ぼ"};
+const han = {"は":"ぱ","ひ":"ぴ","ふ":"ぷ","へ":"ぺ","ほ":"ぽ"};
+const $ = id => document.getElementById(id);
+let slots = [], total = 0, placed = 0, current = null, firstDraw = true, started = false;
+let history = [];
+
+function renderSlots() {
+  $("slots").innerHTML = slots.map((ch, i) => {
+    const selectable = current !== null && !ch && !(firstDraw && i === 0);
+    return `<button class="slot ${ch ? "filled" : ""} ${selectable ? "available" : ""}" data-index="${i}" ${selectable ? "" : "disabled"}>${ch || (i + 1) + "文字目"}</button>`;
+  }).join("");
+  document.querySelectorAll(".slot").forEach(button => {
+    button.addEventListener("click", () => placeCharacter(Number(button.dataset.index)));
+  });
+}
+
+function startGame() {
+  total = 4 + Math.floor(Math.random() * 5);
+  slots = Array(total).fill("");
+  placed = 0;
+  current = null;
+  firstDraw = true;
+  started = true;
+  history = [];
+  $("log").textContent = "まだありません";
+  $("status").textContent = `${total}文字の名前を作ろう！`;
+  $("instruction").textContent = "最初に出た文字は、1文字目以外のマスに入れてね。";
+  $("current").textContent = "—";
+  $("choose").textContent = "「文字を引く」を押してね。";
+  $("start").disabled = true;
+  $("draw").disabled = false;
+  $("dak").disabled = true;
+  $("han").disabled = true;
+  renderSlots();
+}
+
+function drawCharacter() {
+  if (!started || current !== null || placed >= total) return;
+  const character = kana[Math.floor(Math.random() * kana.length)];
+  current = character;
+  $("current").textContent = `「${current}」`;
+  $("choose").textContent = "濁音・半濁音にするか選んでから、入れたい空欄をタップ！";
+  $("dak").disabled = !dak[current];
+  $("han").disabled = !han[current];
+  $("draw").disabled = true;
+  renderSlots();
+}
+
+function changeCharacter(type) {
+  if (current === null) return;
+  const converted = type === "dak" ? dak[current] : han[current];
+  if (!converted) return;
+  current = converted;
+  $("current").textContent = `「${current}」`;
+  $("dak").disabled = !dak[current];
+  $("han").disabled = !han[current];
+}
+
+function placeCharacter(index) {
+  if (current === null || slots[index] || (firstDraw && index === 0)) return;
+  slots[index] = current;
+  history.unshift(`${placed + 1}回目：「${current}」を${index + 1}文字目に配置`);
+  placed++;
+  current = null;
+  firstDraw = false;
+  $("current").textContent = "—";
+  $("choose").textContent = "次の文字を引いてね。";
+  $("dak").disabled = true;
+  $("han").disabled = true;
+  $("draw").disabled = placed >= total;
+  $("log").innerHTML = history.map(item => `<div class="entry">${item}</div>`).join("");
+  if (placed === total) {
+    $("status").textContent = `完成！ ${slots.join("")}`;
+    $("instruction").textContent = "どんな名前になったかな？";
+    $("start").disabled = false;
+    $("draw").disabled = true;
+  } else {
+    $("status").textContent = `${placed} / ${total} 文字 入りました`;
+    $("instruction").textContent = "次の文字を引いて、好きな空欄を選ぼう。";
+  }
+  renderSlots();
+}
+$("start").addEventListener("click", startGame);
+$("draw").addEventListener("click", drawCharacter);
+$("dak").addEventListener("click", () => changeCharacter("dak"));
+$("han").addEventListener("click", () => changeCharacter("han"));
+renderSlots();
+</script>
+</body>
+</html>
